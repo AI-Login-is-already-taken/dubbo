@@ -98,6 +98,9 @@ public abstract class AbstractConfig implements Serializable {
 
     /**
      * The legacy properties container
+     * 新老版本的properties的key映射
+     * key：新版本的配置 映射
+     * value： 旧版本的配置 映射
      */
     private static final Map<String, String> LEGACY_PROPERTIES = new HashMap<String, String>();
 
@@ -123,9 +126,16 @@ public abstract class AbstractConfig implements Serializable {
     /**
      * The config id
      */
+    /**
+    * 配置对象的编号
+    * */
     protected String id;
     protected String prefix;
 
+    /**
+     * 将键对应的值转换为目标得知
+     * 因为，新老配置可能有一些差异，用过该方法进行转换
+     * */
     private static String convertLegacyValue(String key, String value) {
         if (value != null && value.length() > 0) {
             if ("dubbo.service.max.retry.providers".equals(key)) {
@@ -213,6 +223,10 @@ public abstract class AbstractConfig implements Serializable {
         }
     }
 
+    /**
+     * 读取环境变量和 properties 配置到配置对象
+     * 参见：<a href="https://dubbo.gitbooks.io/dubbo-user-book/configuration/properties.html">属性配置</a>
+     **/
     @Deprecated
     protected static void appendAttributes(Map<String, Object> parameters, Object config) {
         appendAttributes(parameters, config, null);

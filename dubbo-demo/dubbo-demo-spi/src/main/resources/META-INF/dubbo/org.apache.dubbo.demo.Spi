@@ -1,0 +1,3 @@
+spia=org.apache.dubbo.demo.SpiAImp
+spib=org.apache.dubbo.demo.SpiBImp
+spiadaptive=org.apache.dubbo.demo.SPIWapper
