@@ -17,13 +17,13 @@
 
 package com.alibaba.dubbo.rpc.protocol.dubbo;
 
+import org.apache.dubbo.rpc.AppResponse;
+import org.apache.dubbo.rpc.Result;
+
 import com.alibaba.dubbo.remoting.RemotingException;
 import com.alibaba.dubbo.remoting.exchange.ResponseCallback;
 import com.alibaba.dubbo.remoting.exchange.ResponseFuture;
 import com.alibaba.dubbo.rpc.RpcException;
-
-import org.apache.dubbo.rpc.AppResponse;
-import org.apache.dubbo.rpc.Result;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -43,6 +43,21 @@ public class FutureAdapter<V> implements Future<V> {
 
     public FutureAdapter(CompletableFuture<Object> future) {
         this.future = future;
+    }
+
+    public FutureAdapter(ResponseFuture responseFuture) {
+        this.future = new CompletableFuture<>();
+        responseFuture.setCallback(new ResponseCallback() {
+            @Override
+            public void done(Object response) {
+                future.complete(response);
+            }
+
+            @Override
+            public void caught(Throwable exception) {
+                future.completeExceptionally(exception);
+            }
+        });
     }
 
     public ResponseFuture getFuture() {

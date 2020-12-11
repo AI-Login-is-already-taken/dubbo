@@ -29,9 +29,7 @@ import org.apache.dubbo.remoting.etcd.StateListener;
 import io.etcd.jetcd.ByteSequence;
 import io.etcd.jetcd.Client;
 import io.etcd.jetcd.ClientBuilder;
-import io.etcd.jetcd.CloseableClient;
 import io.etcd.jetcd.KeyValue;
-import io.etcd.jetcd.Observers;
 import io.etcd.jetcd.common.exception.ErrorCode;
 import io.etcd.jetcd.common.exception.EtcdException;
 import io.etcd.jetcd.kv.GetResponse;
@@ -39,11 +37,12 @@ import io.etcd.jetcd.kv.PutResponse;
 import io.etcd.jetcd.lease.LeaseKeepAliveResponse;
 import io.etcd.jetcd.options.GetOption;
 import io.etcd.jetcd.options.PutOption;
+import io.etcd.jetcd.support.CloseableClient;
+import io.etcd.jetcd.support.Observers;
 import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import io.grpc.util.RoundRobinLoadBalancerFactory;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -146,8 +145,8 @@ public class JEtcdClientWrapper {
             maxInboundSize = Integer.valueOf(System.getProperty(GRPC_MAX_INBOUND_SIZE_KEY));
         }
 
+        // TODO, uses default pick-first round robin.
         ClientBuilder clientBuilder = Client.builder()
-                .loadBalancerFactory(RoundRobinLoadBalancerFactory.getInstance())
                 .endpoints(endPoints(url.getBackupAddress()))
                 .maxInboundMessageSize(maxInboundSize);
 
@@ -315,7 +314,7 @@ public class JEtcdClientWrapper {
     /**
      * create new ephemeral path save to etcd .
      * if node disconnect from etcd, it will be deleted
-     * automatically by etcd when sessian timeout.
+     * automatically by etcd when session timeout.
      *
      * @param path the path to be saved
      * @return the lease of current path.
@@ -665,6 +664,26 @@ public class JEtcdClientWrapper {
             // ignore
         }
         return false;
+    }
+
+    public boolean putEphemeral(final String key, String value) {
+        try {
+            return RetryLoops.invokeWithRetry(
+                    () -> {
+                        requiredNotNull(client, failed);
+                        // recovery an retry
+                        keepAlive();
+                        final long leaseId = globalLeaseId;
+                        client.getKVClient()
+                                .put(ByteSequence.from(key, UTF_8)
+                                        , ByteSequence.from(String.valueOf(value), UTF_8)
+                                        , PutOption.newBuilder().withLeaseId(leaseId).build())
+                                .get(DEFAULT_REQUEST_TIMEOUT, TimeUnit.MILLISECONDS);
+                        return true;
+                    }, retryPolicy);
+        } catch (Exception e) {
+            throw new IllegalStateException(e.getMessage(), e);
+        }
     }
 
     private void retry() {

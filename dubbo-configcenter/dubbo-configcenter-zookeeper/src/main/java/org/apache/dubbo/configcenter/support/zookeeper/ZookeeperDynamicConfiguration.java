@@ -17,29 +17,22 @@
 package org.apache.dubbo.configcenter.support.zookeeper;
 
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.config.configcenter.ConfigurationListener;
+import org.apache.dubbo.common.config.configcenter.TreePathDynamicConfiguration;
 import org.apache.dubbo.common.utils.NamedThreadFactory;
-import org.apache.dubbo.common.utils.StringUtils;
-import org.apache.dubbo.configcenter.ConfigurationListener;
-import org.apache.dubbo.configcenter.DynamicConfiguration;
 import org.apache.dubbo.remoting.zookeeper.ZookeeperClient;
 import org.apache.dubbo.remoting.zookeeper.ZookeeperTransporter;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.apache.dubbo.common.constants.CommonConstants.PATH_SEPARATOR;
-import static org.apache.dubbo.configcenter.Constants.CONFIG_NAMESPACE_KEY;
-
 /**
  *
  */
-public class ZookeeperDynamicConfiguration implements DynamicConfiguration {
-    private static final Logger logger = LoggerFactory.getLogger(ZookeeperDynamicConfiguration.class);
+public class ZookeeperDynamicConfiguration extends TreePathDynamicConfiguration {
 
     private Executor executor;
     // The final root path would be: /configRootPath/"config"
@@ -52,8 +45,9 @@ public class ZookeeperDynamicConfiguration implements DynamicConfiguration {
 
 
     ZookeeperDynamicConfiguration(URL url, ZookeeperTransporter zookeeperTransporter) {
+        super(url);
         this.url = url;
-        rootPath = PATH_SEPARATOR + url.getParameter(CONFIG_NAMESPACE_KEY, DEFAULT_GROUP) + "/config";
+        rootPath = getRootPath(url);
 
         initializedLatch = new CountDownLatch(1);
         this.cacheListener = new CacheListener(rootPath, initializedLatch);
@@ -79,38 +73,44 @@ public class ZookeeperDynamicConfiguration implements DynamicConfiguration {
      * @return
      */
     @Override
-    public Object getInternalProperty(String key) {
+    public String getInternalProperty(String key) {
         return zkClient.getContent(key);
     }
 
-    /**
-     * For service governance, multi group is not supported by this implementation. So group is not used at present.
-     */
     @Override
-    public void addListener(String key, String group, ConfigurationListener listener) {
-        cacheListener.addListener(getPathKey(group, key), listener);
+    protected void doClose() throws Exception {
+        zkClient.close();
     }
 
     @Override
-    public void removeListener(String key, String group, ConfigurationListener listener) {
-        cacheListener.removeListener(getPathKey(group, key), listener);
+    protected boolean doPublishConfig(String pathKey, String content) throws Exception {
+        zkClient.create(pathKey, content, false);
+        return true;
     }
 
     @Override
-    public String getRule(String key, String group, long timeout) throws IllegalStateException {
-        return (String) getInternalProperty(getPathKey(group, key));
+    protected String doGetConfig(String pathKey) throws Exception {
+        return zkClient.getContent(pathKey);
     }
 
     @Override
-    public String getProperties(String key, String group, long timeout) throws IllegalStateException {
-        // use global group 'dubbo' if no group specified
-        if (StringUtils.isEmpty(group)) {
-            group = DEFAULT_GROUP;
-        }
-        return (String) getInternalProperty(getPathKey(group, key));
+    protected boolean doRemoveConfig(String pathKey) throws Exception {
+        zkClient.delete(pathKey);
+        return true;
     }
 
-    private String getPathKey(String group, String key) {
-        return rootPath + PATH_SEPARATOR + group + PATH_SEPARATOR + key;
+    @Override
+    protected Collection<String> doGetConfigKeys(String groupPath) {
+        return zkClient.getChildren(groupPath);
+    }
+
+    @Override
+    protected void doAddListener(String pathKey, ConfigurationListener listener) {
+        cacheListener.addListener(pathKey, listener);
+    }
+
+    @Override
+    protected void doRemoveListener(String pathKey, ConfigurationListener listener) {
+        cacheListener.removeListener(pathKey, listener);
     }
 }

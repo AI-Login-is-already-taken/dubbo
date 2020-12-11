@@ -17,29 +17,31 @@
 package org.apache.dubbo.rpc.cluster.support;
 
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.remoting.Constants;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.dubbo.common.constants.CommonConstants.ALIVE_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.APPLICATION_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.CORE_THREADS_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.DEFAULT_KEY_PREFIX;
+import static org.apache.dubbo.common.constants.CommonConstants.DUBBO_VERSION_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.GROUP_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.INVOKER_LISTENER_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.METHODS_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.QUEUES_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.REFERENCE_FILTER_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.RELEASE_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.REMOTE_APPLICATION_KEY;
+import static org.apache.dubbo.common.constants.CommonConstants.TAG_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.THREADPOOL_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.THREADS_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.THREAD_NAME_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.TIMESTAMP_KEY;
 import static org.apache.dubbo.common.constants.CommonConstants.VERSION_KEY;
-import static org.apache.dubbo.remoting.Constants.DUBBO_VERSION_KEY;
-import static org.apache.dubbo.rpc.Constants.INVOKER_LISTENER_KEY;
-import static org.apache.dubbo.rpc.Constants.REFERENCE_FILTER_KEY;
-import static org.apache.dubbo.rpc.cluster.Constants.TAG_KEY;
 
 /**
  * ClusterUtils
@@ -81,10 +83,16 @@ public class ClusterUtils {
 
         if (localMap != null && localMap.size() > 0) {
             Map<String, String> copyOfLocalMap = new HashMap<>(localMap);
-            copyOfLocalMap.remove(GROUP_KEY);
+
+            if(map.containsKey(GROUP_KEY)){
+                copyOfLocalMap.remove(GROUP_KEY);
+            }
+            if(map.containsKey(VERSION_KEY)){
+                copyOfLocalMap.remove(VERSION_KEY);
+            }
+
             copyOfLocalMap.remove(RELEASE_KEY);
             copyOfLocalMap.remove(DUBBO_VERSION_KEY);
-            copyOfLocalMap.remove(VERSION_KEY);
             copyOfLocalMap.remove(METHODS_KEY);
             copyOfLocalMap.remove(TIMESTAMP_KEY);
             copyOfLocalMap.remove(TAG_KEY);
@@ -109,6 +117,23 @@ public class ClusterUtils {
         }
 
         return remoteUrl.clearParameters().addParameters(map);
+    }
+
+    public static URL mergeProviderUrl(URL remoteUrl, Map<String, String> localMap) {
+
+        //urlprocessor => upc
+        List<ProviderURLMergeProcessor> providerURLMergeProcessors = ExtensionLoader.getExtensionLoader(ProviderURLMergeProcessor.class)
+                .getActivateExtension(remoteUrl, "upc");
+
+        if (providerURLMergeProcessors != null && providerURLMergeProcessors.size() > 0) {
+            for (ProviderURLMergeProcessor providerURLMergeProcessor : providerURLMergeProcessors) {
+                if (providerURLMergeProcessor.accept(remoteUrl, localMap)) {
+                    return providerURLMergeProcessor.mergeProviderUrl(remoteUrl, localMap);
+                }
+            }
+        }
+
+        return mergeUrl(remoteUrl, localMap);
     }
 
 }
